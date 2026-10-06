@@ -1,7 +1,7 @@
 {
   "name": "kisan-kanta-app",
   "private": true,
-  "version": "0.1.0",
+  "version": "2.11.9",
   "type": "module",
   "scripts": {
     "dev": "vite",

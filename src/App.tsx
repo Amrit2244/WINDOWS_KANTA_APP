@@ -4021,7 +4021,7 @@ export default function App() {
                 >
                   {[
                     ["Application", "Kisan Kanta"],
-                    ["Version", "0.1.0"],
+                    ["Version", 2.3],
                     ["Frontend", "React + TypeScript"],
                     ["Desktop Runtime", "Tauri"],
                     ["Backend", "Rust"],
@@ -4120,6 +4120,7 @@ export default function App() {
             <h1>KISAN</h1>
 
             <span>DHARAM KANTA</span>
+            <p>{APP_VERSION}</p>
           </div>
         </div>
 
