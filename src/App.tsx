@@ -467,6 +467,348 @@ export default function App() {
     setShowEstimatedSlip(true);
   }
 
+  // ============================================================
+  // PRINT ESTIMATED WEIGHT SLIP
+  // ============================================================
+
+  async function printEstimatedSlip(
+    row:
+      | ReportRow
+      | {
+          slip_no: string;
+          vehicle_no: string;
+          party_name: string;
+          item_name: string;
+          transaction_type: string;
+          first_weight: number;
+          second_weight: number;
+          net_weight: number;
+          first_weight_label: string;
+          second_weight_label: string;
+          first_weight_at?: string | null;
+          second_weight_at?: string | null;
+          created_by_name?: string | null;
+        },
+  ) {
+    // ==========================================================
+    // READ ESTIMATED VALUES
+    // ==========================================================
+
+    const grossWeight = Number(estimatedGrossWeight);
+    const tareWeight = Number(estimatedTareWeight);
+
+    // ==========================================================
+    // VALIDATION
+    // ==========================================================
+
+    if (!Number.isFinite(grossWeight) || grossWeight <= 0) {
+      alert("Please enter a valid gross weight.");
+      return;
+    }
+
+    if (!Number.isFinite(tareWeight) || tareWeight <= 0) {
+      alert("Please enter a valid tare weight.");
+      return;
+    }
+
+    if (grossWeight < tareWeight) {
+      alert("Gross weight cannot be less than tare weight.");
+      return;
+    }
+
+    // IMPORTANT:
+    // This is only an estimated calculation.
+    // Nothing is written back to SQLite.
+
+    const estimatedNetWeight = grossWeight - tareWeight;
+
+    const operatorName =
+      row.created_by_name || currentUser?.full_name || "Authorized Operator";
+
+    try {
+      // ========================================================
+      // CREATE A5 PDF
+      // ========================================================
+
+      const pdf = new jsPDF({
+        orientation: "portrait",
+        unit: "mm",
+        format: "a5",
+      });
+
+      const pageWidth = pdf.internal.pageSize.getWidth();
+      const pageHeight = pdf.internal.pageSize.getHeight();
+
+      const left = 8;
+      const right = pageWidth - 8;
+
+      // ========================================================
+      // OUTER BORDER
+      // ========================================================
+
+      pdf.setLineWidth(0.7);
+
+      pdf.rect(left, 7, right - left, pageHeight - 14);
+
+      // ========================================================
+      // HEADER
+      // ========================================================
+
+      let y = 16;
+
+      pdf.setFont("helvetica", "bold");
+      pdf.setFontSize(19);
+
+      pdf.text("KISAN DHARAM KANTA", pageWidth / 2, y, {
+        align: "center",
+      });
+
+      y += 7;
+
+      pdf.setFontSize(11);
+
+      pdf.text("ESTIMATED WEIGHT SLIP", pageWidth / 2, y, {
+        align: "center",
+      });
+
+      y += 5;
+
+      pdf.setFont("helvetica", "normal");
+      pdf.setFontSize(7.5);
+
+      pdf.text("For Estimation / Printing Purpose Only", pageWidth / 2, y, {
+        align: "center",
+      });
+
+      // ========================================================
+      // SEPARATOR
+      // ========================================================
+
+      y += 7;
+
+      pdf.setLineWidth(0.5);
+
+      pdf.line(left + 4, y, right - 4, y);
+
+      // ========================================================
+      // SLIP INFORMATION
+      // ========================================================
+
+      y += 7;
+
+      pdf.setFont("helvetica", "bold");
+      pdf.setFontSize(8.5);
+
+      pdf.text(`Slip No: ${row.slip_no}`, left + 5, y);
+
+      pdf.text(row.transaction_type, right - 5, y, {
+        align: "right",
+      });
+
+      // ========================================================
+      // MAIN DETAILS
+      // ========================================================
+
+      y += 5;
+
+      autoTable(pdf, {
+        startY: y,
+
+        margin: {
+          left: left + 4,
+          right: left + 4,
+        },
+
+        theme: "grid",
+
+        body: [
+          ["Vehicle Number", row.vehicle_no],
+          ["Party Name", row.party_name],
+          ["Item", row.item_name],
+          ["Gross Weight", `${grossWeight.toFixed(2)} KG`],
+          ["Tare Weight", `${tareWeight.toFixed(2)} KG`],
+        ],
+
+        styles: {
+          font: "helvetica",
+          fontSize: 8,
+          cellPadding: 2.7,
+          lineWidth: 0.2,
+          valign: "middle",
+        },
+
+        columnStyles: {
+          0: {
+            fontStyle: "bold",
+            cellWidth: 48,
+          },
+
+          1: {
+            cellWidth: "auto",
+          },
+        },
+      });
+
+      // ========================================================
+      // FIND TABLE END
+      // ========================================================
+
+      const tableEndY =
+        (
+          pdf as jsPDF & {
+            lastAutoTable?: {
+              finalY: number;
+            };
+          }
+        ).lastAutoTable?.finalY ?? y + 50;
+
+      // ========================================================
+      // ESTIMATED NET WEIGHT
+      // ========================================================
+
+      y = tableEndY + 8;
+
+      const netBoxHeight = 23;
+
+      pdf.setLineWidth(0.8);
+
+      pdf.rect(left + 4, y, right - left - 8, netBoxHeight);
+
+      pdf.setFont("helvetica", "bold");
+      pdf.setFontSize(8);
+
+      pdf.text("ESTIMATED NET WEIGHT", pageWidth / 2, y + 7, {
+        align: "center",
+      });
+
+      pdf.setFontSize(17);
+
+      pdf.text(`${estimatedNetWeight.toFixed(2)} KG`, pageWidth / 2, y + 17, {
+        align: "center",
+      });
+
+      // ========================================================
+      // TIME INFORMATION
+      // ========================================================
+
+      y += netBoxHeight + 8;
+
+      pdf.setFont("helvetica", "normal");
+      pdf.setFontSize(7.5);
+
+      pdf.text(
+        `In: ${formatReportDate(row.first_weight_at ?? null)}`,
+        left + 5,
+        y,
+      );
+
+      pdf.text(
+        `Out: ${formatReportDate(row.second_weight_at ?? null)}`,
+        right - 5,
+        y,
+        {
+          align: "right",
+        },
+      );
+
+      // ========================================================
+      // SIGNATURE SECTION
+      // ========================================================
+
+      y += 17;
+
+      const signatureWidth = 45;
+
+      const leftSignatureX = left + 12;
+
+      const rightSignatureX = right - 12;
+
+      pdf.setLineWidth(0.5);
+
+      // Operator signature
+
+      pdf.line(leftSignatureX, y, leftSignatureX + signatureWidth, y);
+
+      // Customer signature
+
+      pdf.line(rightSignatureX - signatureWidth, y, rightSignatureX, y);
+
+      pdf.setFontSize(7.5);
+
+      pdf.text(operatorName, leftSignatureX + signatureWidth / 2, y + 5, {
+        align: "center",
+      });
+
+      pdf.text("Operator / User", leftSignatureX + signatureWidth / 2, y + 9, {
+        align: "center",
+      });
+
+      pdf.text(
+        "Customer Signature",
+        rightSignatureX - signatureWidth / 2,
+        y + 5,
+        {
+          align: "center",
+        },
+      );
+
+      pdf.text(
+        "Party Representative",
+        rightSignatureX - signatureWidth / 2,
+        y + 9,
+        {
+          align: "center",
+        },
+      );
+
+      // ========================================================
+      // FOOTER
+      // ========================================================
+
+      y += 19;
+
+      pdf.setFont("helvetica", "normal");
+      pdf.setFontSize(6.5);
+
+      pdf.text(
+        "ESTIMATED SLIP - NOT A DATABASE WEIGHMENT RECORD",
+        pageWidth / 2,
+        y,
+        {
+          align: "center",
+        },
+      );
+
+      // ========================================================
+      // CONVERT PDF TO BASE64
+      // ========================================================
+
+      const dataUri = pdf.output("datauristring");
+
+      const pdfBase64 = dataUri.substring(dataUri.indexOf(",") + 1);
+
+      // ========================================================
+      // SEND TO WINDOWS PRINTER
+      // ========================================================
+
+      const result = await invoke<string>("print_weighment_pdf", {
+        pdfBase64,
+      });
+
+      console.log("Estimated slip sent to printer:", result);
+
+      alert("Estimated weight slip sent to printer.");
+
+      // Close modal after successful printing.
+
+      setShowEstimatedSlip(false);
+    } catch (error) {
+      console.error("Estimated slip printing failed:", error);
+
+      alert(`Estimated slip printing failed.\n\n${String(error)}`);
+    }
+  }
+
   async function saveFirstWeight() {
     if (!vehicleNo.trim()) {
       alert("Vehicle number is required.");

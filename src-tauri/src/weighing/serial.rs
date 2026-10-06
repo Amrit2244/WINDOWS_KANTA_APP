@@ -1,6 +1,6 @@
 // src-tauri/src/weighing/serial.rs
 
-use serialport::{available_ports, DataBits, Parity, SerialPort, StopBits};
+use serialport::{available_ports, DataBits, Parity, StopBits};
 use std::io::Read;
 use std::thread;
 use std::time::Duration;
