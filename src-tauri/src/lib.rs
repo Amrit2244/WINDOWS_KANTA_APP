@@ -28,18 +28,20 @@ fn get_test_weighment() -> WeighmentResponse {
     }
 }
 
+// Get all COM ports currently detected by Windows.
 #[tauri::command]
 fn get_serial_ports() -> Vec<String> {
     weighing::serial::get_available_ports()
 }
 
+// Get the default weighing-machine communication settings.
 #[tauri::command]
 fn get_weighing_machine_settings() -> String {
     let settings = weighing::serial::WeighingMachineSettings::default();
 
     format!(
-        "Port: {}, Baud Rate: {}, Data Bits: 8, Stop Bits: 1, Parity: None",
-        settings.port, settings.baud_rate
+        "Automatic COM Detection, Baud Rate: {}, Data Bits: 8, Stop Bits: 1, Parity: None",
+        settings.baud_rate
     )
 }
 
@@ -47,10 +49,26 @@ fn get_weighing_machine_settings() -> String {
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        // ---------------------------------------------------------
+        // APPLICATION STARTUP
+        // ---------------------------------------------------------
         .setup(|app| {
+            // Initialize SQLite database.
             database::sqlite::initialize_database().map_err(|error| error.to_string())?;
 
-            // START REAL WEIGHING MACHINE
+            // -----------------------------------------------------
+            // START AUTOMATIC WEIGHING MACHINE DETECTION
+            // -----------------------------------------------------
+            //
+            // Kisan Kanta will:
+            //
+            // 1. Scan all available COM ports.
+            // 2. Try the configured serial settings.
+            // 3. Connect to an available port.
+            // 4. Read weight data.
+            // 5. Send weight-update events to React.
+            // 6. If disconnected, automatically scan again.
+            //
             weighing::serial::start_serial_reader(
                 app.handle().clone(),
                 weighing::serial::WeighingMachineSettings::default(),
@@ -58,29 +76,54 @@ pub fn run() {
 
             Ok(())
         })
+        // ---------------------------------------------------------
+        // TAURI COMMANDS
+        // ---------------------------------------------------------
         .invoke_handler(tauri::generate_handler![
+            // -----------------------------------------------------
+            // Application
+            // -----------------------------------------------------
             get_app_name,
             get_test_weighment,
+            // -----------------------------------------------------
+            // Serial / Weighing Machine
+            // -----------------------------------------------------
             get_serial_ports,
             get_weighing_machine_settings,
+            // -----------------------------------------------------
+            // Authentication
+            // -----------------------------------------------------
             database::commands::register_user,
             database::commands::login_user,
+            // -----------------------------------------------------
+            // Master Data
+            // -----------------------------------------------------
             database::commands::create_party,
             database::commands::create_item,
             database::commands::create_vehicle,
+            // -----------------------------------------------------
             // Weighment
+            // -----------------------------------------------------
             database::commands::create_first_weight,
             database::commands::get_pending_weighment,
             database::commands::complete_second_weight,
+            // -----------------------------------------------------
             // Master-data dropdowns
+            // -----------------------------------------------------
             database::commands::get_vehicles,
             database::commands::get_parties,
             database::commands::get_items,
+            // -----------------------------------------------------
             // Reports
+            // -----------------------------------------------------
             database::reports::get_weighment_reports,
+            // -----------------------------------------------------
             // Printing
+            // -----------------------------------------------------
             printing::print_weighment_pdf,
+            // -----------------------------------------------------
             // Settings
+            // -----------------------------------------------------
             database::settings::get_app_settings,
             database::settings::save_app_settings,
             database::settings::get_database_info,
@@ -88,6 +131,9 @@ pub fn run() {
             database::settings::backup_database,
             database::settings::change_user_password,
         ])
+        // ---------------------------------------------------------
+        // START TAURI APPLICATION
+        // ---------------------------------------------------------
         .run(tauri::generate_context!())
         .expect("error while running Tauri application");
 }

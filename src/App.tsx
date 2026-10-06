@@ -16,7 +16,7 @@ import autoTable from "jspdf-autotable";
 // ============================================================
 
 // NEW: These are the pages in our application.
-const APP_VERSION = "1.0.0";
+const APP_VERSION = "2.11.9";
 
 type Page =
   | "dashboard"

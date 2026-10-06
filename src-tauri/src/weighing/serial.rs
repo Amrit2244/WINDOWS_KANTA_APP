@@ -10,7 +10,6 @@ use super::parser::parse_weight;
 
 #[derive(Debug, Clone)]
 pub struct WeighingMachineSettings {
-    pub port: String,
     pub baud_rate: u32,
     pub data_bits: DataBits,
     pub stop_bits: StopBits,
@@ -20,7 +19,6 @@ pub struct WeighingMachineSettings {
 impl Default for WeighingMachineSettings {
     fn default() -> Self {
         Self {
-            port: "COM5".to_string(),
             baud_rate: 1200,
             data_bits: DataBits::Eight,
             stop_bits: StopBits::One,
@@ -29,92 +27,195 @@ impl Default for WeighingMachineSettings {
     }
 }
 
-/// Starts the real weighing-machine serial reader.
-///
-/// The serial reader runs in a background thread so it does not
-/// block the Tauri application or the React frontend.
+/// Automatically finds an available COM port
+/// and connects to the weighing machine.
 pub fn start_serial_reader(app: AppHandle, settings: WeighingMachineSettings) {
     thread::spawn(move || {
-        println!(
-            "Starting weighing machine on {} @ {} baud",
-            settings.port, settings.baud_rate
-        );
-
-        let port_result = serialport::new(&settings.port, settings.baud_rate)
-            .data_bits(settings.data_bits)
-            .stop_bits(settings.stop_bits)
-            .parity(settings.parity)
-            .timeout(Duration::from_millis(500))
-            .open();
-
-        let mut port = match port_result {
-            Ok(port) => {
-                println!(
-                    "Weighing machine connected successfully on {}",
-                    settings.port
-                );
-
-                let _ = app.emit("serial-status", format!("Connected to {}", settings.port));
-
-                port
-            }
-
-            Err(error) => {
-                eprintln!(
-                    "Could not open weighing machine port {}: {}",
-                    settings.port, error
-                );
-
-                let _ = app.emit("serial-status", format!("Connection failed: {}", error));
-
-                return;
-            }
-        };
-
-        let mut buffer = [0u8; 256];
-
         loop {
-            match port.read(&mut buffer) {
-                Ok(bytes_read) => {
-                    if bytes_read == 0 {
-                        continue;
-                    }
+            println!("Searching for weighing machine COM port...");
 
-                    let data = String::from_utf8_lossy(&buffer[..bytes_read]);
+            let port_name = find_available_port(&settings);
 
-                    println!("Raw weighing machine data: {:?}", data);
+            match port_name {
+                Some(port_name) => {
+                    println!("Weighing machine found on {}", port_name);
 
-                    // A weighing indicator normally sends data continuously.
-                    //
-                    // We process every received chunk and try to extract
-                    // a numeric weight from it.
-                    for line in data.lines() {
-                        if let Some(weight) = parse_weight(line) {
-                            println!("Parsed weight: {}", weight);
+                    let _ = app.emit("serial-status", format!("Connected to {}", port_name));
 
-                            let _ = app.emit("weight-update", weight);
-                        }
-                    }
+                    read_from_port(app.clone(), port_name, &settings);
                 }
 
-                Err(error) if error.kind() == std::io::ErrorKind::TimedOut => {
-                    // Timeout is normal. Continue waiting for the next
-                    // weighing-machine message.
-                    continue;
-                }
+                None => {
+                    println!("No weighing machine COM port found.");
 
-                Err(error) => {
-                    eprintln!("Serial read error: {}", error);
+                    let _ = app.emit(
+                        "serial-status",
+                        "Searching for weighing machine...".to_string(),
+                    );
 
-                    let _ = app.emit("serial-status", format!("Serial read error: {}", error));
-
-                    thread::sleep(Duration::from_millis(500));
+                    // Check again after 2 seconds.
+                    thread::sleep(Duration::from_secs(2));
                 }
             }
         }
     });
 }
 
+/// Search all available COM ports and try to open them.
+fn find_available_port(settings: &WeighingMachineSettings) -> Option<String> {
+    let ports = match available_ports() {
+        Ok(ports) => ports,
+
+        Err(error) => {
+            eprintln!("Could not list COM ports: {}", error);
+
+            return None;
+        }
+    };
+
+    for port_info in ports {
+        let port_name = port_info.port_name;
+
+        println!("Trying COM port: {}", port_name);
+
+        let result = serialport::new(&port_name, settings.baud_rate)
+            .data_bits(settings.data_bits)
+            .stop_bits(settings.stop_bits)
+            .parity(settings.parity)
+            .timeout(Duration::from_millis(500))
+            .open();
+
+        match result {
+            Ok(_) => {
+                println!("Successfully opened {}", port_name);
+
+                return Some(port_name);
+            }
+
+            Err(error) => {
+                println!("Could not open {}: {}", port_name, error);
+            }
+        }
+    }
+
+    None
+}
+
+/// Read weight continuously from the selected COM port.
+fn read_from_port(app: AppHandle, port_name: String, settings: &WeighingMachineSettings) {
+    println!("Starting weight reader on {}", port_name);
+
+    let port_result = serialport::new(&port_name, settings.baud_rate)
+        .data_bits(settings.data_bits)
+        .stop_bits(settings.stop_bits)
+        .parity(settings.parity)
+        .timeout(Duration::from_millis(500))
+        .open();
+
+    let mut port = match port_result {
+        Ok(port) => port,
+
+        Err(error) => {
+            eprintln!("Could not open {}: {}", port_name, error);
+
+            return;
+        }
+    };
+
+    let mut read_buffer = [0u8; 256];
+
+    // ---------------------------------------------------------
+    // IMPORTANT:
+    // Serial data can arrive one character at a time.
+    //
+    // Example:
+    //
+    // First read  -> "7"
+    // Second read -> "5"
+    // Third read  -> "K"
+    // Fourth read -> "G"
+    //
+    // We therefore keep the data until \r or \n arrives.
+    // ---------------------------------------------------------
+    let mut message_buffer = String::new();
+
+    loop {
+        match port.read(&mut read_buffer) {
+            Ok(bytes_read) => {
+                if bytes_read == 0 {
+                    continue;
+                }
+
+                let data = String::from_utf8_lossy(&read_buffer[..bytes_read]);
+
+                println!("Raw weighing machine data: {:?}", data);
+
+                // Add new data to our persistent buffer.
+                message_buffer.push_str(&data);
+
+                // -------------------------------------------------
+                // Process complete messages.
+                //
+                // Your machine is sending:
+                //
+                // 75KG\r\n
+                //
+                // So \r or \n tells us that the message is complete.
+                // -------------------------------------------------
+
+                while let Some(position) = message_buffer.find('\n') {
+                    // Take everything before \n.
+                    let message = message_buffer[..position].trim().to_string();
+
+                    // Remove processed message from buffer.
+                    message_buffer = message_buffer[position + 1..].to_string();
+
+                    if message.is_empty() {
+                        continue;
+                    }
+
+                    println!("Complete weighing-machine message: {:?}", message);
+
+                    // Parse the complete message.
+                    if let Some(weight) = parse_weight(&message) {
+                        println!("Parsed weight: {}", weight);
+
+                        let _ = app.emit("weight-update", weight);
+                    }
+                }
+
+                // -------------------------------------------------
+                // Safety:
+                // If something goes wrong and the device sends
+                // endless data without \n, don't allow the buffer
+                // to grow forever.
+                // -------------------------------------------------
+
+                if message_buffer.len() > 1024 {
+                    eprintln!("Serial buffer exceeded 1024 bytes. Resetting.");
+
+                    message_buffer.clear();
+                }
+            }
+
+            Err(error) if error.kind() == std::io::ErrorKind::TimedOut => {
+                continue;
+            }
+
+            Err(error) => {
+                eprintln!("Serial connection lost on {}: {}", port_name, error);
+
+                let _ = app.emit(
+                    "serial-status",
+                    format!("Connection lost from {}", port_name),
+                );
+
+                // Return to the automatic COM scanner.
+                return;
+            }
+        }
+    }
+}
 /// Returns the COM ports currently available on Windows.
 pub fn get_available_ports() -> Vec<String> {
     match available_ports() {
