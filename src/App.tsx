@@ -16,7 +16,7 @@ import autoTable from "jspdf-autotable";
 // ============================================================
 
 // NEW: These are the pages in our application.
-const APP_VERSION = "2.11.9";
+const APP_VERSION = "3.11.9";
 
 type Page =
   | "dashboard"
@@ -2439,7 +2439,7 @@ export default function App() {
                       })
                     }
                   >
-                    Estimated Weight Slip
+                    Dharam Kanta Weight Slip
                   </button>
                   <button
                     className="primary-button"
@@ -2480,7 +2480,7 @@ export default function App() {
             >
               <div className="card-title">
                 <div>
-                  <h3>Estimated Weight Slip</h3>
+                  <h3>Dharam Kanta Weight Slip</h3>
                   <span>Temporary values — not saved to database</span>
                 </div>
 
@@ -2576,7 +2576,7 @@ export default function App() {
                   textAlign: "center",
                 }}
               >
-                <span>ESTIMATED NET WEIGHT</span>
+                <span> NET WEIGHT</span>
 
                 <strong>{estimatedNetWeight.toFixed(2)}</strong>
 
@@ -2610,7 +2610,7 @@ export default function App() {
                     })
                   }
                 >
-                  Print Estimated Slip
+                  Print Dharam Kanta Slip
                 </button>
               </div>
             </div>
@@ -3215,7 +3215,7 @@ export default function App() {
                       className="secondary-button"
                       onClick={() => openEstimatedSlip(r)}
                     >
-                      Estimated
+                      Weighment
                     </button>
                   </td>
                 </tr>

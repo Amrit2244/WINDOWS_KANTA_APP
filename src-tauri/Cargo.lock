@@ -3,6 +3,23 @@
 version = 4
 
 [[package]]
+name = "Crusher-kanta-app"
+version = "3.11.9"
+dependencies = [
+ "base64 0.23.1",
+ "bcrypt",
+ "chrono",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "serialport",
+ "tauri",
+ "tauri-build",
+ "tauri-plugin-opener",
+ "winprint",
+]
+
+[[package]]
 name = "adler2"
 version = "2.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2309,23 +2326,6 @@ dependencies = [
  "bitflags 2.13.2",
  "serde",
  "unicode-segmentation",
-]
-
-[[package]]
-name = "kisan-kanta-app"
-version = "2.11.9"
-dependencies = [
- "base64 0.23.1",
- "bcrypt",
- "chrono",
- "rusqlite",
- "serde",
- "serde_json",
- "serialport",
- "tauri",
- "tauri-build",
- "tauri-plugin-opener",
- "winprint",
 ]
 
 [[package]]

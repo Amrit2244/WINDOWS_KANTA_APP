@@ -1,7 +1,6 @@
 {
-  "$schema": "https://schema.tauri.app/config/2",
-  "productName": "kisan-kanta-app",
- "version": "2.11.9",
+  "productName": "Crusher-kanta-app",
+ "version": "3.11.9",
   "identifier": "com.user.kisan-kanta-app",
   "build": {
     "beforeDevCommand": "pnpm dev",
@@ -12,7 +11,7 @@
   "app": {
     "windows": [
       {
-        "title": "kisan-kanta-app",
+        "title": "Crusher-kanta-app",
         "width": 800,
         "height": 600
       }
